@@ -72,19 +72,18 @@ sets the first for you:
   when you haven't set it, so a hand-made prefix behaves the same. (The
   same requirement, with RADV frame measurements, is in the upstream
   Linux/Proton notes in fxceless/victory-fork#41.)
-- **A Win8.1/10-era native `d3dcompiler_47`.** Wine's builtin is a vendored
+- **A native `d3dcompiler_47`.** Wine's builtin is a vendored
   vkd3d-shader: it has no `RWByteAddressBuffer.Interlocked*()` or
   `Load*()` methods and no `[RootSignature(...)]` handling, so `cs_5_1`
-  compiles fail with `E5005` and the game's shaders can fail too. Some
-  `winetricks d3dcompiler_47` versions install a newer native DLL that
-  works; the June-2010 redistributable that others install predates D3D12
-  — it compiles `[RootSignature(...)]` sources without complaint but
-  embeds no root signature, and `CreateRootSignature` then fails with a
-  bare `E_FAIL`. Copy `d3dcompiler_47.dll` from your own Windows 10/11
-  `C:\Windows\System32` and pin it with `--d3dcompiler FILE` (or copy it
-  into the prefix's `system32` and keep the `d3dcompiler_47=n` override).
-  The DLL is your data: the asset policy keeps it out of the repo either
-  way.
+  compiles fail with `E5005` and the game's shaders can fail too. The
+  working Linux path is the current `winetricks -q -f d3dcompiler_47`:
+  it installs a native Microsoft DLL (from Mozilla's fxc2) that keeps the
+  root signature. An old June-2010 redistributable is not enough — it
+  refuses the 5_1 profile (`X3506`) and embeds no root signature at 5_0.
+  `run.sh --d3dcompiler FILE` pins a copy from your own Windows 10/11
+  `system32` instead, for a machine without winetricks or network. Either
+  way keep the `d3dcompiler_47=n` override, and note the DLL is your
+  data: the asset policy keeps it out of the repo.
 
 ## 3. The config for a Proton run
 
@@ -128,12 +127,12 @@ Win10-era native `d3dcompiler_47` as above:
     real D3D12 hands back an empty library. A platform expectation, not a
     regression — it fails the same on plain `main` (fxceless/victory-fork#64).
 
-  With the June-2010 winetricks `d3dcompiler_47` instead, four fail: the
-  three that compile `*_5_1` inline shaders (the 2010 build refuses the
-  5_1 profile — `X3506` — and even at 5_0 embeds no root signature), plus
-  the library test. `crate::host::compile` retries 5_1 at 5_0 for compilers
-  too old for the 5_1 profile, which helps Win8-era copies; it cannot rescue
-  the 2010 one, so get the Win10-era DLL.
+  With only the June-2010 redistributable instead, four fail: the three
+  that compile `*_5_1` inline shaders (the 2010 build refuses the 5_1
+  profile — `X3506` — and even at 5_0 embeds no root signature), plus the
+  library test. `crate::host::compile` retries 5_1 at 5_0 for compilers too
+  old for the 5_1 profile, which helps Win8-era copies; it cannot rescue
+  the 2010 one, so use the current winetricks DLL or a Win10-era copy.
 
 Known gaps and unverified areas (file an issue if you hit one):
 
