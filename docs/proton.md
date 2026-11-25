@@ -41,12 +41,26 @@ proton/run.sh --z /mnt/games inspect "Z:\\games\\scripts\\x64\\final.js.c.c.gmpc
 proton/run.sh --z /mnt/games run "Z:\\games\\x64\\final.exe" --execute
 ```
 
-`proton/run.sh` picks the newest `GE-Proton*` it can find, keeps its prefix
-at `$XDG_DATA_HOME/victory/proton` (idempotent), and takes `--prefix`,
-`--exe`, `--proton` (a specific Proton dir or plain `wine`), `--z`,
-`--config` and `--texture-no-wait`. `--z DIR` links a folder into the
-prefix's Z: drive, so a game directory stays wherever it lives while the
-config can name it `Z:\games`.
+`proton/run.sh` picks the newest `GE-Proton*` first, then the newest plain
+`Proton-*`, keeps its prefix at `$XDG_DATA_HOME/victory/proton`
+(idempotent), and takes `--prefix`, `--exe`, `--proton` (a specific Proton
+dir or plain `wine`), `--z`, `--config`, `--d3dcompiler`, `--texture-wait`
+and `--texture-no-wait`.
+
+The first run creates the prefix, makes `dosdevices/`, and links `z:` to
+`../drive_z`; a second run reuses all of it. GE-Proton 10+ instead maps
+`z:` to `/`, so the whole host filesystem is already visible under `Z:` —
+`--z` is a no-op there, and a game directory is named as the host path
+(`Z:\mnt\games`, not `Z:\games`). On an older prefix `--z DIR` links `DIR`
+into `drive_z` as `Z:\<basename>`.
+
+`run.sh` launches through the Proton script's `waitforexitandrun` verb with
+`UMU_ID` set: Proton treats that as a non-Steam UMU launch and, given a
+Windows-side exe path, runs Wine on it directly instead of injecting
+through `steam.exe`, so stdout, stderr and the exit code come back to the
+terminal. It deliberately does not use `runinprefix`: that runs Wine too,
+but it skips Proton's prefix setup, so a fresh prefix never receives
+dxvk/vkd3d.
 
 Two environment levers decide whether the GPU path works, and `run.sh`
 sets the first for you:
@@ -58,14 +72,19 @@ sets the first for you:
   when you haven't set it, so a hand-made prefix behaves the same. (The
   same requirement, with RADV frame measurements, is in the upstream
   Linux/Proton notes in fxceless/victory-fork#41.)
-- **A Win8.1/10-era native `d3dcompiler_47`.** Do not trust `winetricks
-  d3dcompiler_47`: it installs the fixed June-2010 redistributable, which
-  predates D3D12 — it compiles `[RootSignature(...)]` sources without
-  complaint but embeds no root signature, and `CreateRootSignature` then
-  fails with a bare `E_FAIL`. Copy `d3dcompiler_47.dll` from your own
-  Windows 10/11 `C:\Windows\System32` into the prefix's `system32` (it is
-  your data: the asset policy keeps it out of the repo either way) and
-  keep the `d3dcompiler_47=n` override.
+- **A Win8.1/10-era native `d3dcompiler_47`.** Wine's builtin is a vendored
+  vkd3d-shader: it has no `RWByteAddressBuffer.Interlocked*()` or
+  `Load*()` methods and no `[RootSignature(...)]` handling, so `cs_5_1`
+  compiles fail with `E5005` and the game's shaders can fail too. Some
+  `winetricks d3dcompiler_47` versions install a newer native DLL that
+  works; the June-2010 redistributable that others install predates D3D12
+  — it compiles `[RootSignature(...)]` sources without complaint but
+  embeds no root signature, and `CreateRootSignature` then fails with a
+  bare `E_FAIL`. Copy `d3dcompiler_47.dll` from your own Windows 10/11
+  `C:\Windows\System32` and pin it with `--d3dcompiler FILE` (or copy it
+  into the prefix's `system32` and keep the `d3dcompiler_47=n` override).
+  The DLL is your data: the asset policy keeps it out of the repo either
+  way.
 
 ## 3. The config for a Proton run
 
@@ -80,7 +99,8 @@ cp victory.example.toml victory.proton.toml
 
 ```toml
 [paths]
-game_dir = 'Z:\games'
+# GE-Proton 10+ maps Z: to /, so a host path /mnt/games is Z:\mnt\games.
+game_dir = 'Z:\mnt\games'
 # cache_dir/data_dir default to the prefix's LOCALAPPDATA, which is fine;
 # or point them at Z:\somewhere for easy browsing from the Linux side.
 ```
@@ -124,23 +144,45 @@ Known gaps and unverified areas (file an issue if you hit one):
   the write-watch queries and the debug layer have had no Wine testing.
 - **Input/audio**: hle's gamepad and audio paths were built against Windows
   behaviour; under Wine they ride whatever Wine presents. Unverified.
+- **The start screen needs input.** Without a pad, the title sits at 30 fps
+  and 13 draws a frame on the start screen for ever; the log looks like a
+  loader that never finishes and shows no error. A diagnostics build
+  (`--features diagnostics`) can press Enter on a schedule:
+
+  ```bash
+  VICTORY_KEYS=25:Enter,40:Enter,55:Enter,70:Enter proton/run.sh ...
+  ```
+
+  Two presses are not always enough; four at roughly 15-second spacing
+  worked. The release build has no scripted keys, so use a pad or the
+  diagnostics build. A run that never pressed anything is not evidence
+  that loading is broken.
 - **HDR**: with HDR on, vkd3d-proton present throttles to ~400 ms a frame
   and the 30 s watchdog ends a run within the first minute — keep HDR off
   on the display for Proton runs (#41 measures the same on RADV). 10-bit
   output remains untested.
-- A full `victory run` under Proton has been shown possible on AMD/RADV:
-  menus, intro and world streaming at 1 800–5 300 draws a frame with the
-  two levers above (#41). It has not been run on this box yet.
+- A full `victory run` under Proton works on AMD/RADV: menus, intro,
+  loading, then world streaming at 1 777–5 292 draws a frame, 0.1–0.5 fps
+  in the streaming phase, 87–241 ms of GPU time (CachyOS, RX 7900 XT,
+  Proton Experimental, #41). The two levers are the native d3d12/dxgi
+  override `run.sh` sets and HDR off on the display. The exact numbers are
+  machine-specific; the smoke box for the suite above has not recorded a
+  full run.
 - **Texture-lane waits**: under Wine the texture lane's remap-lock wait is
-  a mapping lock that costs up to seconds per window; `VICTORY_TEXTURE_NO_WAIT=1`
-  (flag `--texture-no-wait` in `run.sh`) takes it to zero at the cost of up
-  to two textures a frame deferred to the next one — measurements in
+  a mapping lock that costs up to seconds per window;
+  `VICTORY_TEXTURE_NO_WAIT=1` is on by default in `run.sh` (opt out with
+  `--texture-wait`) and takes it to zero at the cost of up to two textures
+  a frame deferred to the next one — measurements in
   fxceless/victory-fork#178.
+- **`inspect` examples are illustrative**: the `final.js.c.c.gmpc` blob
+  name is build-specific. Use a file that actually exists under your game
+  directory, or skip `inspect` and start with `config` and `census`.
 
 ## 5. Tests and CI
 
 The Ubuntu job runs the native Linux test suite; the Windows job runs the
 same suite plus clippy. `cargo test -p xtask` checks the launch scripts
-parse and their usage text holds; `proton/smoke.sh` is the Proton-path
-smoke test — run it after touching `proton/`, and paste its output into
-bug reports.
+parse, their usage text holds, a fresh prefix gets its `dosdevices/z:` link,
+and GE-Proton wins the default selection over an older plain Proton;
+`proton/smoke.sh` is the Proton-path smoke test — run it after touching
+`proton/`, and paste its output into bug reports.

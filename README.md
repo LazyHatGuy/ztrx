@@ -17,7 +17,7 @@ Tested on Windows 11 with an **NVIDIA GeForce RTX 3050** (8 GB):
 | Stability | 1 h 30 min+ in one session without a crash |
 | Frame rate | 1-3 fps in the world (the first run is slower while shaders translate; they are cached after that) |
 | Known problems | anything in shadow is black and bright scenes overexpose (the game's ray-traced lighting does not run yet); some blocky artifacts; boats sit low in the water |
-| Linux (Proton) | the workspace builds, tests and runs its file-side commands natively; the game via `proton/run.sh` is new and untested beyond smoke tests (docs/proton.md) |
+| Linux (Proton) | the workspace builds, tests and runs its file-side commands natively; the game runs through `proton/run.sh` in a Proton prefix, with the Wine-dependent gaps in docs/proton.md |
 
 ## Requirements
 
