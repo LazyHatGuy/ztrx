@@ -47,12 +47,13 @@ proton/run.sh --z /mnt/games run "Z:\\games\\x64\\final.exe" --execute
 dir or plain `wine`), `--z`, `--config`, `--d3dcompiler`, `--texture-wait`
 and `--texture-no-wait`.
 
-The first run creates the prefix, makes `dosdevices/`, and links `z:` to
-`../drive_z`; a second run reuses all of it. GE-Proton 10+ instead maps
-`z:` to `/`, so the whole host filesystem is already visible under `Z:` —
-`--z` is a no-op there, and a game directory is named as the host path
-(`Z:\mnt\games`, not `Z:\games`). On an older prefix `--z DIR` links `DIR`
-into `drive_z` as `Z:\<basename>`.
+The first run creates the prefix and its `dosdevices/`; on a plain-Wine
+or pre-10 prefix it links `z:` to `../drive_z`, and a second run reuses
+all of it. GE-Proton 10+ maps `z:` to `/` instead, so the whole host
+filesystem is already visible under `Z:` — `--z` is a no-op there, and a
+game directory is named as the host path (`Z:\mnt\games`, not
+`Z:\games`). On an older prefix `--z DIR` links `DIR` into `drive_z` as
+`Z:\<basename>`.
 
 `run.sh` launches through the Proton script's `waitforexitandrun` verb with
 `UMU_ID` set: Proton treats that as a non-Steam UMU launch and, given a
